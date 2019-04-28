@@ -15,10 +15,11 @@
     <Implicit_Jitter_Distribution>{1636c7f7-4429-4482-86b1-ce6acd37f9e2}</Implicit_Jitter_Distribution>
     <LibraryReferences>{cc9a7d78-3a4f-4410-8007-e02c42766709}</LibraryReferences>
     <CombineIds>false</CombineIds>
-    <Company>HDS Global</Company>
     <Released>true</Released>
-    <Title>RoboFS_Standard</Title>
     <ProjectVersion>1.0</ProjectVersion>
+    <Title>Controls Standard</Title>
+    <Author>Purav Dagli</Author>
+    <Company>Purav Dagli</Company>
     <!--    <OutputType>Exe</OutputType>
     <RootNamespace>MyApplication</RootNamespace>
     <AssemblyName>MyApplication</AssemblyName>-->
