@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="StateServo" Id="{582aa5e5-6121-42b2-b724-ca47257ac2ab}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE StateServo :
+(
+	None,
+	Error,
+	Resetting,
+	Disabling,
+	Disabled,
+	Enabling,
+	Enabled,
+	Homing,
+	MoveInProgress,
+	MoveComplete,
+	Stopping,	
+	Stopped,
+	Jogging
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="Assembly_Conveyor" Id="{d460b149-adbf-4df5-9d39-6f1da505c84e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Assembly_Conveyor
+VAR_INPUT
+	cmdRunFwd 			: BOOL;
+	cmdRunRev 			: BOOL;
+	cmdStop 			: BOOL;
+	cfgRestartDelay		: TIME;
+	inpTensionOK AT %I*	: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <LineIds Name="Assembly_Conveyor">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

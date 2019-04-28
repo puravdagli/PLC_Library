@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="MC_MoveParametersCheck" Id="{bb5c89e3-aff3-4a4e-a6b0-c271cbc38e32}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK MC_MoveParametersCheck
+VAR_INPUT
+	iMoveIndex : INT;
+END_VAR
+
+VAR_OUTPUT
+	oValid : BOOL;
+END_VAR
+
+VAR_IN_OUT
+	ioAxis		: Axis_Ref;
+	ioMoves 	: ARRAY [1..100] OF ServoMove;
+END_VAR
+
+VAR
+	MCReadMaxVelocity		 	: MC_ReadParameter;
+	MCReadMaxAccel				: MC_ReadParameter;
+	MCReadMaxDecel				: MC_ReadParameter;
+	MCReadMaxJerk				: MC_ReadParameter;
+	MaxVelocity			: LREAL;
+	MaxAccel			: LREAL;
+	MaxDecel			: LREAL;
+	MaxJerk				: LREAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[MCReadMaxVelocity 	(	Enable 	:= TRUE,
+						Axis	:= ioAxis,
+						ParameterNumber := MC_AxisParameter.AxisMaxVelocity,
+						ReadMode := E_ReadMode.READMODE_CYCLIC);
+
+MCReadMaxAccel		(	Enable 	:= TRUE,
+						Axis	:= ioAxis,
+						ParameterNumber := MC_AxisParameter.AxisMaximumAcceleration,
+						ReadMode := E_ReadMode.READMODE_CYCLIC);
+
+MCReadMaxDecel		(	Enable 	:= TRUE,
+						Axis	:= ioAxis,
+						ParameterNumber := MC_AxisParameter.AxisMaximumDeceleration,
+						ReadMode := E_ReadMode.READMODE_CYCLIC);
+
+MCReadMaxJerk		(	Enable 	:= TRUE,
+						Axis	:= ioAxis,
+						ParameterNumber := MC_AxisParameter.MaxJerk,
+						ReadMode := E_ReadMode.READMODE_CYCLIC);
+
+
+MaxVelocity		:= MCReadMaxVelocity.Value;
+MaxAccel		:= MCReadMaxAccel.Value;
+MaxDecel		:= MCReadMaxDecel.Value;
+MaxJerk			:= MCReadMaxJerk.Value;
+
+IF 		ioMoves[iMoveIndex].Velocity > 0 AND ioMoves[iMoveIndex].Velocity < MaxVelocity AND 
+		ioMoves[iMoveIndex].Accel > 0 AND ioMoves[iMoveIndex].Accel < MaxAccel AND 
+		ioMoves[iMoveIndex].Decel > 0 AND ioMoves[iMoveIndex].Decel < MaxDecel AND
+		ioMoves[iMoveIndex].Jerk >0 AND ioMoves[iMoveIndex].Jerk < MaxJerk AND
+		ioMoves[iMoveIndex].MoveType <> MoveTypeServo.None THEN
+					
+	oValid := TRUE;
+ELSE
+	oValid := FALSE;	
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="MC_MoveParametersCheck">
+      <LineId Id="3" Count="34" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

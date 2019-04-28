@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="StateSequencer" Id="{68903b15-3efc-4d51-9b72-8f7a767fdc34}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE StateSequencer :
+(
+	Idle,
+	Running,
+	Complete,
+	Faulted
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

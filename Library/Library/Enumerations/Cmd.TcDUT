@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="Cmd" Id="{1e5b96b8-90c8-4326-8491-d48b6b264de9}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE Cmd :
+(
+	None,
+	Abort,
+	Reset,
+	Start,
+	Stop,
+	Pause,
+	Resume
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

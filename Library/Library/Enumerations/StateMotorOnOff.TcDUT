@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="StateMotorOnOff" Id="{51495461-c464-45d8-929b-3815145d1229}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE StateMotorOnOff :
+(
+	None,
+	Error,
+	Stopping,
+	Stopped,
+	StartingFwd,
+	RunningFwd,
+	StartingRev,
+	RunningRev
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

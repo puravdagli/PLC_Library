@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="ServoMove" Id="{4ce59b8d-2e79-431f-94e7-5064c965528a}">
+    <Declaration><![CDATA[TYPE ServoMove :
+STRUCT
+	Name 		: STRING;
+	MoveType	: MoveTypeServo;
+	Position	: LREAL;
+	Velocity	: LREAL;
+	Accel		: LREAL;
+	Decel		: LREAL;
+	Jerk		: LREAL;
+	Direction	: MC_Direction;
+	BufferMode	: MC_BufferMode;
+	Permissive	: eAND;
+	Interlock	: eAND;
+END_STRUCT
+END_TYPE
+
+
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

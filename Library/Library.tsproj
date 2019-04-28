@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<TcSmProject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.beckhoff.com/schemas/2012/07/TcSmProject" TcSmVersion="1.0" TcVersion="3.1.4022.20">
+	<Project ProjectGUID="{EEE9B830-511E-4204-8E58-4FC80F48C31E}" Target64Bit="true" ShowHideConfigurations="#x306">
+		<Plc>
+			<Project GUID="{D03765BC-22FE-4B5D-BD8A-46A58E7F2780}" Name="Library" PrjFilePath="Library\Library.plcproj" TmcFilePath="Library\Library.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2">
+					<Name>Library Instance</Name>
+					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
+				</Instance>
+			</Project>
+		</Plc>
+	</Project>
+</TcSmProject>

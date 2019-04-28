@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="StateActuator" Id="{054d0146-6ed0-4540-a536-553e6061ddbd}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE StateActuator :
+(
+	None,
+	Error,
+	Retracting,
+	Retracted,
+	Extending,
+	Extended
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

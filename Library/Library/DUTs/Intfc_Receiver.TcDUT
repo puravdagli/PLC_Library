@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="Intfc_Receiver" Id="{94652a52-846a-4827-b42e-1e84c140a403}">
+    <Declaration><![CDATA[TYPE Intfc_Receiver :
+STRUCT
+	iHandshake 			: Handshake_Send;
+	oHandshake			: Handshake_Receive;
+	cSenderNetId		: STRING;
+	cSenderPort			: UINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

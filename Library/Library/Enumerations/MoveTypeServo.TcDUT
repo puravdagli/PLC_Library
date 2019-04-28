@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="MoveTypeServo" Id="{3db3393c-2ab8-49c9-8ea3-77907a3ef2b3}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE MoveTypeServo :
+(
+	None,
+	Continuous,
+	LinearAbs,
+	LinearRel,
+	RotaryAbs,
+	RotaryRel
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

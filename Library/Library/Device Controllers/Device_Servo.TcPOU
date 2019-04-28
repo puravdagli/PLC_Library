@@ -1,0 +1,640 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="Device_Servo" Id="{d3a998bf-b10b-447c-87bf-88735344d6d3}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Device_Servo
+
+VAR_INPUT
+	iPowerOn				: BOOL;							//	Power On signal
+	iSafetyOk				: BOOL;							//	Safety Ok signal from safety logic
+	iMode					: Mode;							// 	Device Mode - Auto/Manual
+	iCmd					: CmdServo;						// 	Servo command
+	iCmdRetry				: BOOL;							// 	Retry current Command (when failed)
+	iCmdAbort				: BOOL;							// 	Abort current Command (when failed)
+	iMoveIndex				: INT;							// 	Servo Move Index (command)
+	iJogFwd					: BOOL;							// 	Jog Forward command
+	iJogRev					: BOOL;							// 	Jog Reverse command
+	iJogFast				: BOOL;							// 	Jog at standard fast speed
+END_VAR
+
+VAR_OUTPUT
+	oState					: StateServo := StateServo.Disabled;	// Servo Status
+	oErrorCode				: INT;
+	oCmdFailed				: BOOL;									// Current Command failed to execute
+	sMoveIndex				: INT;									// Servo Move Index (status)
+	sMoveNotPermitted		: BOOL;									// Specified move permissives are not active
+	sMoveInvalid			: BOOL;									// Specified move does not have valid parameters
+END_VAR
+
+VAR_IN_OUT
+	ioAxis					: AXIS_REF;						// Axis reference (process data plc/nc)	
+	ioMoves					: ARRAY[1..100] OF ServoMove; 	// Array of Servo Moves
+END_VAR
+
+VAR	
+	MCPower 				: MC_Power;						// FB for enable and override
+	MCReset 				: MC_Reset;						// FB to reset axis
+	MCHome					: MC_Home;						// FB to home axis
+	MCHalt	 				: MC_Halt;						// FB to stop axis
+	MCMoveVel				: MC_MoveVelocity;				// FB for continuous velocity moves
+	MCMoveAbs				: MC_MoveAbsolute;				// FB for absolute position moves
+	MCMoveRel				: MC_MoveRelative;				// FB for relative position moves
+	MCJog					: MC_Jog;						// FB for jogging
+	MCMoveParametersCheck	: MC_MoveParametersCheck;		// FB for validating move parameters
+	JogMode					: E_JogMode;					// ENUM for jog mode
+	CurrentMove				: ServoMove;
+END_VAR
+
+VAR PERSISTENT
+	Name					: STRING;
+END_VAR
+
+VAR_TEMP
+	MoveIsValid		: BOOL;
+	PrevStatus		: StateServo;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ioAxis.ReadStatus();
+
+CASE oState OF
+	StateServo.None:			oState := StateServo.Disabling;
+	StateServo.Error:			Error();	
+	StateServo.Resetting:		Resetting();
+	StateServo.Disabling:		Disabling();
+	StateServo.Disabled:		Disabled();
+	StateServo.Enabling:		Enabling();
+	StateServo.Enabled:			Enabled();
+	StateServo.Homing:			Homing();
+	StateServo.MoveInProgress:	MoveInProgress();																				//	CurrentMove is set in the previous state
+	StateServo.MoveComplete :	MoveComplete();
+	StateServo.Stopping:		Stopping();
+	StateServo.Stopped:			Stopped();
+	StateServo.Jogging :		Jogging();
+END_CASE]]></ST>
+    </Implementation>
+    <Action Name="Disabled" Id="{8721e80d-9ba8-4d9c-8d78-27f8491776b5}">
+      <Implementation>
+        <ST><![CDATA[IF 	iCmd = CmdServo.Enable THEN												//	accept the Enable command
+	oState 					:= StateServo.Enabling;							//	change status to Enabling
+	iCmd 					:= CmdServo.None;								//	clear command
+END_IF
+
+IF ioAxis.Status.Error THEN
+	oState						:= StateServo.Error;
+ELSIF ioAxis.Status.StandStill THEN
+	oState						:= StateServo.Enabled;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Disabling" Id="{c561bcc9-4c6b-486d-99e9-f66334f41d97}">
+      <Implementation>
+        <ST><![CDATA[MCPower(	Enable 				:= FALSE,										//	call fb to Disable axis
+			Enable_Positive		:= FALSE, 										//
+			Enable_Negative		:= FALSE, 										//
+			Override			:= 0,											//
+			Axis				:= ioAxis);										//
+IF 	NOT MCPower.Status AND ioAxis.Status.Disabled THEN							//	check whether fb is Done and axis status is Disabled
+	oState 						:= StateServo.Disabled;								//	change status to Disabled
+END_IF
+
+IF MCPower.Error THEN
+	oCmdFailed					:= TRUE;
+	IF iCmdRetry THEN
+		MCPower( 	Enable		:= TRUE,										//	call Power fb with Enable = true
+					Axis		:= ioAxis);										//	Power fb will get retriggered on the next scan
+		oCmdFailed				:= FALSE;
+		iCmdRetry				:= FALSE;
+	ELSIF iCmdAbort THEN
+		MCPower( 	Enable		:= TRUE,										//	call Power fb with Enable = true
+					Axis		:= ioAxis);
+		oState					:= PrevStatus;									//	change status back to previous
+		oCmdFailed				:= FALSE;
+		iCmdAbort				:= FALSE;
+	END_IF
+END_IF
+
+IF ioAxis.Status.Error THEN
+	oState						:= StateServo.Error;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Enabled" Id="{96d55ba1-ab38-4c14-9eba-bfa2546d074f}">
+      <Implementation>
+        <ST><![CDATA[IF ioAxis.Status.Homed THEN														//	check whether the axis has been homed
+	oState 					:= StateServo.Stopped;								//	change status to Stopped
+ELSIF ioAxis.Status.Error THEN													//	check whether the axis is in error
+	oState						:= StateServo.Error;							//	change status to Error
+END_IF
+
+CASE iCmd  OF
+		CmdServo.Home:															//	accept the Home command
+					oState		:= StateServo.Homing;							//	change status to Homing
+					iCmd	:= CmdServo.None;								//	clear command
+		CmdServo.Jog:															//	accept the Jog Command
+					oState		:= StateServo.Jogging;							//	change status to Jogging
+					iCmd	:= CmdServo.None;								//	clear command
+		CmdServo.Disable:														//	accept the Disable command
+					oState		:= StateServo.Disabling;						//	change status to Disabling
+					PrevStatus	:= StateServo.Enabled;
+					iCmd	:= CmdServo.None;								//	clear command  
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Enabling" Id="{be19b156-fcfc-4c15-a890-36df694c35fe}">
+      <Implementation>
+        <ST><![CDATA[MCPower(	Enable 				:= TRUE, 										//	call fb to Enable axis
+			Enable_Positive		:= TRUE, 										//					
+			Enable_Negative		:= TRUE, 										//
+			Override			:= 100,											//
+			Axis				:= ioAxis);										//
+IF 	MCPower.Status AND ioAxis.Status.StandStill THEN							//	check whether fb is Done and axis status is Standstill
+	oState 					:= StateServo.Enabled;								//	change status to Enabled 
+END_IF
+
+IF MCPower.Error THEN
+	oCmdFailed				:= TRUE;
+	IF iCmdRetry THEN
+		MCPower( 	Enable		:= FALSE,										//	call Power fb with Execute = false
+					Axis		:= ioAxis);										//	Power fb will get retriggered on the next scan
+		oCmdFailed			:= FALSE;
+		iCmdRetry			:= FALSE;
+	ELSIF iCmdAbort THEN
+		MCPower( 	Enable		:= FALSE,										//	call Power fb with Execute = false
+					Axis		:= ioAxis);
+		oState					:= StateServo.Disabled;
+		oCmdFailed			:= FALSE;
+		iCmdAbort			:= FALSE;
+	END_IF
+END_IF
+
+IF ioAxis.Status.Error THEN
+	oState						:= StateServo.Error;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Error" Id="{1b991ec1-958b-4c49-8bcb-5e18daf9b7ca}">
+      <Implementation>
+        <ST><![CDATA[IF 	iCmd = CmdServo.Reset THEN												//	accept the Reset command
+	oState		 				:= StateServo.Resetting;							//	change status to Resetting		
+	iCmd 						:= CmdServo.None;								//	clear command
+END_IF								
+																				//	(for error reset externally, for ex. by power cycle of drive)
+IF ioAxis.Status.Disabled AND NOT ioaxis.status.error THEN						//	check whether axis status is Disabled
+	oState						:= StateServo.Disabled;							//	change status to Disabled
+ELSIF ioAxis.Status.StandStill THEN												//	or else if axis status is Standstill	
+	oState						:= StateServo.Enabled;							//	change status to Enabled
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Homing" Id="{7e34a337-df2d-407a-864b-bdc6a31a8026}">
+      <Implementation>
+        <ST><![CDATA[MCHome( 	Execute				:= TRUE,										//	call fb to Home axis
+			Axis				:= ioAxis);
+IF 	MCHome.Done THEN 
+	IF ioAxis.Status.Homed AND ioAxis.Status.StandStill THEN					//	check for fb Done and axis status successfully changed to Homed and Standstill
+	oState 					:= StateServo.Stopped;							//	change status to Stopped
+	END_IF
+ELSIF MCHome.Error THEN
+	oCmdFailed				:= TRUE;
+	IF iCmdRetry THEN														//	command retry
+		MCHome( 	Execute		:= FALSE,										//	call Home fb with Execute = false
+					Axis		:= ioAxis);										//	Home fb will get retriggered on the next scan
+		oCmdFailed			:= FALSE;
+		iCmdRetry			:= FALSE;
+	ELSIF iCmdAbort THEN													//	command abort
+		oState					:= StateServo.Enabled;								//	change status back to Error
+		oCmdFailed			:= FALSE;
+		iCmdAbort			:= FALSE;
+	END_IF
+END_IF
+
+IF 	iCmd = CmdServo.Stop THEN												//	accept the Stop command
+	oState 					:= StateServo.Stopping;							//	change status to Stopping
+ELSIF iCmd = CmdServo.Disable THEN												//	accept the Disable command
+	oState 					:= StateServo.Disabling;							//	change status to Disabling
+END_IF
+
+IF ioAxis.Status.Error THEN
+	oState						:= StateServo.Error;
+END_IF
+
+IF oState <> StateServo.Homing THEN												//	when Status has been changed within the block
+	MCHome( Execute				:= FALSE,										//	call Home fb with Execute = false
+			Axis				:= ioAxis);
+	iCmd 					:= CmdServo.None;								//	clear command
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Jogging" Id="{8d48eb60-f409-4d9c-acf1-2008401e46fc}">
+      <Implementation>
+        <ST><![CDATA[IF iJogFast THEN																//	check whether JogFast is true
+	JogMode							:= E_JogMode.MC_JOGMODE_STANDARD_FAST;		//	set fast jog mode
+ELSE																			//
+	JogMode							:= E_JogMode.MC_JOGMODE_STANDARD_SLOW;		//	default jog mode is slow
+END_IF																			//
+																				//
+MCJog(		JogForward				:= iJogFwd,									//	call fb for Jogging
+			JogBackwards			:= iJogRev, 								//	(exclusivity of JogFwd and JogRev must be enforced at the input source)
+			Mode					:= JogMode,									//
+			Axis					:= ioAxis);									//
+																				//
+IF NOT MCJog.Busy THEN															//	when tmpfbStatus=True this indicates no jog in progress
+	CASE iCmd OF																//
+		CmdServo.StartMove:														//	accept the StartMove command
+			ioMoves[iMoveIndex].Permissive();									//	check permissive
+			IF NOT ioMoves[iMoveIndex].Permissive.Q THEN
+				sMoveNotPermitted				:= TRUE;
+				oCmdFailed						:= TRUE;
+			ELSE
+				sMoveNotPermitted				:= FALSE;
+			END_IF
+			
+			MCMoveParametersCheck(	iMoveIndex 	:= iMoveIndex,					//	check parameters
+									ioMoves 	:= ioMoves, 
+									ioAxis 		:= ioAxis);
+			IF NOT MCMoveParametersCheck.oValid THEN
+				sMoveInvalid					:= TRUE;
+				oCmdFailed						:= TRUE;
+			ELSE
+				sMoveInvalid					:= FALSE;
+			END_IF
+					
+			IF  ioMoves[iMoveIndex].Permissive.Q AND MCMoveParametersCheck.oValid AND NOT oCmdFailed THEN
+				CurrentMove 			:= ioMoves[iMoveIndex];
+				oState 					:= StateServo.MoveInProgress;
+				iCmd 					:= CmdServo.None;						//	clear command
+			END_IF
+			
+			IF oCmdFailed AND iCmdRetry THEN
+				oCmdFailed				:= FALSE;
+				iCmdRetry				:= FALSE;
+			ELSIF oCmdFailed AND iCmdAbort THEN
+				oCmdFailed				:= FALSE;	 	
+				sMoveNotPermitted		:= FALSE;
+				sMoveInvalid			:= FALSE;	
+				iCmd	 				:= CmdServo.None;						//	clear command
+				iCmdAbort				:= FALSE;
+			END_IF	
+		CmdServo.Stop:															//	accept Stop command		
+			oState 					:= StateServo.Stopping;						//	change status to Stopping
+			PrevStatus				:= StateServo.Jogging;
+			iCmd 					:= CmdServo.None;							//	clear command
+			iJogFast				:= FALSE;									//	clear fast mode for jogging
+		CmdServo.Disable:														//	accept Disable command
+			oState 					:= StateServo.Disabling;					//	change status to Disabling
+			iCmd 					:= CmdServo.None;							//	clear command
+			iJogFast				:= FALSE;									//	clear fast mode for jogging
+	END_CASE
+END_IF
+
+IF ioAxis.Status.Error THEN
+	oState						:= StateServo.Error;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="MoveComplete" Id="{0c5079ad-84ab-4ff6-b667-655af40f2533}">
+      <Implementation>
+        <ST><![CDATA[CASE iCmd OF
+	CmdServo.Disable:
+		oState 						:= StateServo.Disabling;
+		iCmd 						:= CmdServo.None;								//	clear command
+	CmdServo.Stop:
+		oState 						:= StateServo.Stopping;
+		PrevStatus					:= StateServo.MoveComplete;
+		iCmd 						:= CmdServo.None;								//	clear command
+	CmdServo.StartMove:
+		ioMoves[iMoveIndex].Permissive();										//	check permissive
+		IF NOT ioMoves[iMoveIndex].Permissive.Q THEN
+			sMoveNotPermitted				:= TRUE;
+			oCmdFailed						:= TRUE;
+		ELSE
+			sMoveNotPermitted				:= FALSE;
+		END_IF
+		
+		MCMoveParametersCheck(	iMoveIndex 	:= iMoveIndex,						//	check parameters
+								ioMoves 	:= ioMoves, 
+								ioAxis 		:= ioAxis);
+		IF NOT MCMoveParametersCheck.oValid THEN
+			sMoveInvalid					:= TRUE;
+			oCmdFailed						:= TRUE;
+		ELSE
+			sMoveInvalid					:= FALSE;
+		END_IF
+				
+		IF  ioMoves[iMoveIndex].Permissive.Q AND MCMoveParametersCheck.oValid AND NOT oCmdFailed THEN
+			CurrentMove 			:= ioMoves[iMoveIndex];
+			oState 					:= StateServo.MoveInProgress;
+			iCmd 					:= CmdServo.None;							//	clear command
+		END_IF
+		
+		IF oCmdFailed AND iCmdRetry THEN
+			oCmdFailed				:= FALSE;
+			iCmdRetry				:= FALSE;
+		ELSIF oCmdFailed AND iCmdAbort THEN
+			oCmdFailed				:= FALSE;
+			sMoveNotPermitted		:= FALSE;
+			sMoveInvalid			:= FALSE;		 		
+			iCmd	 				:= CmdServo.None;							//	clear command
+			iCmdAbort				:= FALSE;
+		END_IF		
+	CmdServo.Jog:
+		oState 					:= StateServo.Jogging;
+		iCmd 					:= CmdServo.None;								//	clear command
+END_CASE
+
+IF ioAxis.Status.Error THEN
+	oState						:= StateServo.Error;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="MoveInProgress" Id="{139fafd1-4422-40d8-9264-92411821f966}">
+      <Implementation>
+        <ST><![CDATA[CASE CurrentMove.MoveType OF
+ 
+	MoveTypeServo.Continuous :
+				MCMoveVel (	Execute 		:= TRUE,
+							Velocity		:= CurrentMove.Velocity,
+							Acceleration	:= CurrentMove.Accel,
+							Deceleration	:= CurrentMove.Decel,
+							Jerk			:= CurrentMove.Jerk,
+							BufferMode		:= CurrentMove.BufferMode,
+							Direction		:= CurrentMove.Direction,
+							Axis 			:= ioAxis);
+				IF MCMoveVel.InVelocity THEN
+					oState					:= StateServo.MoveComplete;
+				ELSIF MCMoveVel.Error THEN
+					oCmdFailed			:= TRUE;
+					IF iCmdRetry THEN										//	command retry
+						MCMoveVel( 	Execute	:= FALSE,							//	call Move fb with Execute = false
+									Axis	:= ioAxis);							//	Home fb will get retriggered on the next scan
+						oCmdFailed		:= FALSE;
+						iCmdRetry		:= FALSE;
+					ELSIF iCmdAbort THEN									//	command abort
+						oState				:= StateServo.Stopping;				//	change status to Stopping
+						oCmdFailed		:= FALSE;
+						iCmdAbort		:= FALSE;
+					END_IF
+				END_IF
+							
+	MoveTypeServo.LinearAbs :
+				MCMoveAbs (	Execute 		:= TRUE,
+							Position		:= CurrentMove.Position,
+							Velocity		:= CurrentMove.Velocity,
+							Acceleration	:= CurrentMove.Accel,
+							Deceleration	:= CurrentMove.Decel,
+							Jerk			:= CurrentMove.Jerk,
+							BufferMode		:= CurrentMove.BufferMode,
+							Axis 			:= ioAxis);
+				IF MCMoveAbs.Done THEN
+					oState					:= StateServo.MoveComplete;
+				ELSIF MCMoveAbs.Error THEN
+					oCmdFailed			:= TRUE;
+					IF iCmdRetry THEN										//	command retry
+						MCMoveAbs( 	Execute	:= FALSE,							//	call Move fb with Execute = false
+									Axis	:= ioAxis);							//	Move fb will get retriggered on the next scan
+						oCmdFailed		:= FALSE;
+						iCmdRetry		:= FALSE;
+					ELSIF iCmdAbort THEN									//	command abort
+						oState				:= StateServo.Stopping;				//	change status to Stopping
+						oCmdFailed		:= FALSE;
+						iCmdAbort		:= FALSE;
+					END_IF
+				END_IF
+				
+	MoveTypeServo.LinearRel :
+				MCMoveRel (	Execute 		:= TRUE,
+							Distance		:= CurrentMove.Position,			// Current Move Position is expected to be 'distance' for this move type
+							Velocity		:= CurrentMove.Velocity,
+							Acceleration	:= CurrentMove.Accel,
+							Deceleration	:= CurrentMove.Decel,
+							Jerk			:= CurrentMove.Jerk,
+							BufferMode		:= CurrentMove.BufferMode,
+							Axis 			:= ioAxis);
+				IF MCMoveRel.Done THEN
+					oState					:= StateServo.MoveComplete;
+				ELSIF MCMoveRel.Error THEN
+					oCmdFailed			:= TRUE;
+					IF iCmdRetry THEN										//	command retry
+						MCMoveRel( 	Execute	:= FALSE,							//	call Move fb with Execute = false
+									Axis	:= ioAxis);							//	Move fb will get retriggered on the next scan
+						oCmdFailed		:= FALSE;
+						iCmdRetry		:= FALSE;
+					ELSIF iCmdAbort THEN									//	command abort
+						oState			:= StateServo.Stopping;				//	change status to Stopping
+						oCmdFailed		:= FALSE;
+						iCmdAbort		:= FALSE;
+					END_IF
+				END_IF
+				
+	MoveTypeServo.RotaryAbs :
+	MoveTypeServo.RotaryRel :
+END_CASE
+	
+CASE iCmd OF
+	CmdServo.Disable:															//	accept the Disable command
+		oState 					:= StateServo.Disabling;						//	change status to Disabling
+	CmdServo.Stop:																//	accept the Stop command
+		oState 					:= StateServo.Stopping;						//	chagne status to Stopping
+		PrevStatus					:= StateServo.MoveInProgress;
+END_CASE
+	
+IF ioAxis.Status.Error THEN
+	oState							:= StateServo.Error;
+END_IF
+	
+IF oState <> StateServo.MoveInProgress THEN										// 	when Status has been changed within the block
+	CASE CurrentMove.MoveType OF
+		MoveTypeServo.Continuous :
+				MCMoveVel (	Execute			:= FALSE,									//	reset MCMoves
+							Axis			:= ioAxis);
+		MoveTypeServo.LinearAbs :
+				MCMoveAbs (	Execute			:= FALSE,
+							Axis			:= ioAxis);
+		MoveTypeServo.LinearRel :
+				MCMoveRel (	Execute			:= FALSE,
+							Axis			:= ioAxis);
+	END_CASE		
+	iCmd 						:= CmdServo.None;							//	clear command
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Resetting" Id="{546dbd43-20f1-4e26-b7aa-3eba99bfc3c2}">
+      <Implementation>
+        <ST><![CDATA[MCReset( 	Execute				:= TRUE,										//	call fb to Reset axis
+			Axis				:= ioAxis);										//
+			
+IF 	MCReset.Done THEN															//	if fb is Done (command successful)
+	IF ioAxis.Status.Disabled THEN												//	check whether axis status is Disabled
+		oState					:= StateServo.Disabled;							//	change status to Disabled
+	ELSIF ioAxis.Status.StandStill THEN											//	or else if axis status is Standstill	
+		oState					:= StateServo.Enabled;							//	change status to Enabled
+	ELSIF ioAxis.Status.Error THEN												//	or else if axis status is Error
+		oState					:= StateServo.Error;								//	change status to Error
+	END_IF																		//
+	MCReset( 	Execute			:= FALSE,										//	call Reset fb with Execute = false
+				Axis			:= ioAxis);
+ELSIF MCReset.Error THEN														//	if fb has an Error (command failed)
+	oCmdFailed					:= TRUE;
+	IF iCmdRetry THEN														//	command retry
+		MCReset( 	Execute		:= FALSE,										//	call Reset fb with Execute = false
+					Axis		:= ioAxis);										//	Reset fb will get retriggered on the next scan
+		oCmdFailed				:= FALSE;
+		iCmdRetry				:= FALSE;
+	ELSIF iCmdAbort THEN													//	command abort
+		MCReset( 	Execute		:= FALSE,										//	call Reset fb with Execute = false
+					Axis		:= ioAxis);
+		oState					:= PrevStatus;									//	change status back to Error
+		oCmdFailed				:= FALSE;
+		iCmdAbort				:= FALSE;
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Stopped" Id="{603bc2a8-b360-4edf-8159-c38baa3db4ed}">
+      <Implementation>
+        <ST><![CDATA[CASE iCmd OF
+	CmdServo.Disable:																		//	accept the Disable command
+					oState 								:= StateServo.Disabling;			//	change status to Disabling
+					iCmd 								:= CmdServo.None;					//	clear command
+	CmdServo.Home:																			//	accept the Disable command
+					oState 								:= StateServo.Homing;				//	change status to Homing
+					iCmd 								:= CmdServo.None;					//	clear command
+	CmdServo.StartMove:																		//	accept the StartMove command
+					ioMoves[iMoveIndex].Permissive();										//	check permissive
+					IF NOT ioMoves[iMoveIndex].Permissive.Q THEN
+						sMoveNotPermitted				:= TRUE;
+						oCmdFailed						:= TRUE;
+					ELSE
+						sMoveNotPermitted				:= FALSE;
+					END_IF
+					
+					MCMoveParametersCheck(	iMoveIndex 	:= iMoveIndex,						//	check parameters
+											ioMoves 	:= ioMoves, 
+											ioAxis 		:= ioAxis);
+					IF NOT MCMoveParametersCheck.oValid THEN
+						sMoveInvalid					:= TRUE;
+						oCmdFailed						:= TRUE;
+					ELSE
+						sMoveInvalid					:= FALSE;
+					END_IF
+							
+					IF  ioMoves[iMoveIndex].Permissive.Q AND MCMoveParametersCheck.oValid AND NOT oCmdFailed THEN
+						CurrentMove 					:= ioMoves[iMoveIndex];
+						oState 							:= StateServo.MoveInProgress;
+						iCmd 							:= CmdServo.None;					//	clear command
+					END_IF
+					
+					IF oCmdFailed AND iCmdRetry THEN
+						oCmdFailed						:= FALSE;
+						iCmdRetry						:= FALSE;
+					ELSIF oCmdFailed AND iCmdAbort THEN
+						oCmdFailed						:= FALSE;
+						sMoveNotPermitted				:= FALSE;
+						sMoveInvalid					:= FALSE;	
+						iCmd	 						:= CmdServo.None;					//	clear command
+						iCmdAbort						:= FALSE;
+					END_IF															
+	CmdServo.Jog:																			//	accept the Jog command
+					oState 								:= StateServo.Jogging;				//	change status to Jogging
+					iCmd 								:= CmdServo.None;					//	clear command
+END_CASE
+
+IF ioAxis.Status.Error THEN
+	oState												:= StateServo.Error;
+ELSIF ioAxis.status.Disabled THEN
+	oState												:= StateServo.Disabled;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Stopping" Id="{a89bbd91-dd06-4777-a99c-f93bbfcda25e}">
+      <Implementation>
+        <ST><![CDATA[MCHalt(		Execute				:= TRUE,										//	call fb to Halt axis
+			Axis				:= ioAxis);
+IF 	MCHalt.Done AND ioaxis.Status.StandStill THEN								//	check for fb Done and axis status successfully changed to Standstill
+	IF ioAxis.Status.Homed THEN													//	if axis has been homed
+		oState 				:= StateServo.Stopped;							//	change status to Stopped
+	ELSE																		//	if axis has not been homed (possible when jogging before homing)
+		oState					:= StateServo.Enabled;							//	chagne status to Enabled
+	END_IF
+ELSIF MCHalt.Error THEN
+	oCmdFailed				:= TRUE;
+	IF iCmdRetry THEN														//	command retry
+		MCHalt( 	Execute		:= FALSE,										//	call Halt fb with Execute = false
+					Axis		:= ioAxis);										//	Home fb will get retriggered on the next scan
+		oCmdFailed			:= FALSE;
+		iCmdRetry			:= FALSE;
+	ELSIF iCmdAbort THEN													//	command abort
+		oState					:= PrevStatus;									//	change status back to previous
+		oCmdFailed			:= FALSE;
+		iCmdAbort			:= FALSE;
+	END_IF
+END_IF
+
+IF 	iCmd = CmdServo.Disable THEN											//	accept the Disable command
+	oState 					:= StateServo.Disabling;							//	change status to Disabling
+END_IF
+
+IF ioAxis.Status.Error THEN
+	oState						:= StateServo.Error;
+END_IF
+
+IF oState <> StateServo.Stopping THEN											//	when Status has been changed within the block
+	MCHalt( 	Execute			:= FALSE,										//	call Halt fb with Execute = false
+				Axis			:= ioAxis);
+	iCmd					:= CmdServo.None;								//	clear command
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="Device_Servo">
+      <LineId Id="3" Count="15" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Disabled">
+      <LineId Id="2" Count="8" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Disabling">
+      <LineId Id="2" Count="26" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Enabled">
+      <LineId Id="2" Count="16" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Enabling">
+      <LineId Id="2" Count="26" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Error">
+      <LineId Id="2" Count="8" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Homing">
+      <LineId Id="2" Count="33" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Jogging">
+      <LineId Id="2" Count="61" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.MoveComplete">
+      <LineId Id="2" Count="49" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.MoveInProgress">
+      <LineId Id="2" Count="105" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Resetting">
+      <LineId Id="2" Count="26" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Stopped">
+      <LineId Id="2" Count="50" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="Device_Servo.Stopping">
+      <LineId Id="2" Count="33" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

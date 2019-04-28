@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="CmdActuator" Id="{e3044dd0-7f55-4203-a6ea-e1e1cf0b94c8}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE CmdActuator :
+(
+	None,
+	Extend,
+	Retract,
+	Reset
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="Assembly_Lift" Id="{a7107f9f-d629-4c97-be06-e4e4baa66f2c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Assembly_Lift
+
+VAR_INPUT
+	iPowerOn			: BOOL;
+	iSafetyOk			: BOOL;
+	cmdRaise			: BOOL;
+	cmdLower			: BOOL;
+	cfgReverseAction	: BOOL;
+END_VAR
+
+VAR_OUTPUT
+	stsRaised			: BOOL;
+	stsLowered			: BOOL;
+	stsFaulted			: BOOL;
+	stsFaultCode		: BOOL;
+END_VAR
+
+VAR_IN_OUT
+	Actuator : Device_Actuator;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <LineIds Name="Assembly_Lift">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,159 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="StateManager" Id="{083d85a0-2e7f-4dbe-9d45-05d755c9ae22}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK StateManager
+
+VAR_INPUT
+	iCmd 				: Cmd;
+	iCmdRetry			: BOOL;
+	iCmdAbort			: BOOL;
+	iStartPermissives 	: eAND;
+	iRunInterlocks 		: eAND;
+	iSeqComplete 		: BOOL;
+	iSeqFault			: BOOL;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	cAutoStart			: BOOL;
+END_VAR
+
+VAR_OUTPUT
+	oState 				: State;
+	oCmdFailed			: BOOL;
+	sReadyToStart 		: BOOL;
+	sCurrentRunTime 	: REAL;
+	sPrevRunTime 		: REAL;
+END_VAR
+
+VAR_TEMP
+	tmpRunTimer			: TIME;
+END_VAR
+
+VAR
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[iStartPermissives();
+iRunInterlocks();
+
+CASE oState OF
+	State.Aborting:
+						IF iSeqComplete THEN
+							oState 				:= State.Aborted;
+							iSeqComplete 		:= FALSE;
+						ELSIF iSeqFault THEN
+							oCmdFailed			:= TRUE;
+						END_IF	
+	
+	State.Aborted : 	
+						IF iCmd = Cmd.Reset THEN
+							oState 				:= State.Resetting;
+							iCmd				:= Cmd.None;
+						END_IF
+	
+	State.Resetting : 	
+						IF iSeqComplete THEN
+							oState 				:= State.Stopped;
+							iSeqComplete 		:= FALSE;
+						ELSIF iSeqFault THEN
+							oCmdFailed			:= TRUE;
+						END_IF
+						
+						IF iCmd = Cmd.Abort THEN
+							oState 				:= State.Aborting;
+							iCmd				:= Cmd.None;
+						END_IF
+					
+	State.Stopped :		
+						IF cAutoStart AND iStartPermissives.Q AND iRunInterlocks.Q THEN
+									oState 		:= State.Starting;
+						END_IF
+						
+						CASE iCmd OF
+							Cmd.Start:
+								IF iStartPermissives.Q AND iRunInterlocks.Q AND NOT oCmdFailed THEN
+									oState 		:= State.Starting;
+									iCmd		:= Cmd.None;
+								ELSE
+									oCmdFailed	:= TRUE;
+								END_IF
+													
+							Cmd.Abort:
+									oState 		:= State.Aborting;
+									iCmd		:= Cmd.None;
+						END_CASE
+
+	State.Starting :	
+						IF iSeqComplete THEN
+							oState 				:= State.Running;
+							iSeqComplete 		:= FALSE;
+						ELSIF iSeqFault THEN
+							oCmdFailed			:= TRUE;
+						END_IF
+						
+						CASE iCmd OF
+							Cmd.Stop:
+									oState 		:= State.Stopping;
+									iCmd		:= Cmd.None;
+							Cmd.Abort:
+									oState 		:= State.Aborting;
+									iCmd		:= Cmd.None;
+						END_CASE
+
+	State.Running :		
+						IF iSeqComplete THEN
+							oState 				:= State.Stopping;
+							iSeqComplete 		:= FALSE;
+						ELSIF NOT iRunInterlocks.Q THEN
+									oState 		:= State.Pausing;
+						END_IF
+						
+						CASE iCmd OF
+							Cmd.Pause:
+									oState 		:= State.Pausing;
+									iCmd		:= Cmd.None;
+							Cmd.Stop:
+									oState 		:= State.Stopping;
+									iCmd		:= Cmd.None;
+							Cmd.Abort:
+									oState 		:= State.Aborting;
+									iCmd		:= Cmd.None;
+						END_CASE	
+						
+	State.Pausing :
+						IF iSeqComplete THEN
+							oState 				:= State.Paused;
+							iSeqComplete 		:= FALSE;
+						END_IF
+						
+						CASE iCmd OF
+							Cmd.Stop:
+									oState 		:= State.Stopping;
+									iCmd		:= Cmd.None;
+							Cmd.Abort:
+									oState 		:= State.Aborting;
+									iCmd		:= Cmd.None;
+						END_CASE
+						
+	State.Paused :
+	
+						CASE iCmd OF
+							Cmd.Stop:
+									oState 		:= State.Stopping;
+									iCmd		:= Cmd.None;
+							Cmd.Abort:
+									oState 		:= State.Aborting;
+									iCmd		:= Cmd.None;
+						END_CASE
+	
+END_CASE
+
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="StateManager">
+      <LineId Id="3" Count="115" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

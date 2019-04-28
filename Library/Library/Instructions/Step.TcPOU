@@ -1,0 +1,99 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="Step" Id="{efc0ed87-c022-492f-9b62-2f25b03d44fb}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Step
+VAR_INPUT
+	iFaultCondition	: BOOL;
+	iComplete		: BOOL;
+	iRetry			: BOOL;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	cThisStep		: INT;
+	cNextStep		: INT;
+	cRecoveryStep	: INT;
+	cTimeoutPreset	: TIME;
+	cDescription	: STRING;
+END_VAR
+
+VAR_OUTPUT
+	sActive			: BOOL;
+	sFaulted		: BOOL;
+	sTimedout		: BOOL;
+	sComplete		: BOOL;
+END_VAR
+
+VAR_IN_OUT
+	ioActiveStep	: INT;
+END_VAR
+
+VAR
+	Status			: StatusStep;	
+	ActiveTime		: TON;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ActiveTime.PT := cTimeoutPreset;
+
+CASE Status OF
+	StatusStep.Inactive:
+							IF ioActiveStep = cThisStep THEN
+								Status 			:= StatusStep.Active;
+							END_IF
+	StatusStep.Active:
+							ActiveTime.IN 		:= TRUE;
+							
+							IF ActiveTime.Q THEN
+								Status 			:= StatusStep.TimedOut;
+								ActiveTime.IN 	:= FALSE;
+							END_IF
+							
+							IF iFaultCondition THEN
+								Status			:= StatusStep.Faulted;
+							END_IF
+							
+							IF iComplete THEN
+								Status			:= StatusStep.Complete;
+							END_IF
+	StatusStep.Faulted:
+							IF iRetry THEN
+								IF iFaultCondition = FALSE THEN
+									Status			:= StatusStep.Active;
+								ELSIF cRecoveryStep <> 0 THEN
+									ioActiveStep := cRecoveryStep;
+								END_IF
+							END_IF
+	StatusStep.TimedOut:
+							IF iRetry THEN
+								Status			:= StatusStep.Active;
+							END_IF
+	StatusStep.Complete:
+							ioActiveStep := cNextStep;
+
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="Step">
+      <LineId Id="46" Count="1" />
+      <LineId Id="30" Count="1" />
+      <LineId Id="38" Count="2" />
+      <LineId Id="33" Count="0" />
+      <LineId Id="41" Count="3" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="49" Count="3" />
+      <LineId Id="55" Count="3" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="64" Count="1" />
+      <LineId Id="70" Count="0" />
+      <LineId Id="72" Count="1" />
+      <LineId Id="71" Count="0" />
+      <LineId Id="63" Count="0" />
+      <LineId Id="35" Count="0" />
+      <LineId Id="60" Count="2" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="32" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

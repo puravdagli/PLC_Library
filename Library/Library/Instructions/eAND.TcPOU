@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="eAND" Id="{04c04eee-14cc-4c70-95db-7e0da617be42}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK eAND
+VAR_INPUT
+	IN1 : BOOL;
+	IN2 : BOOL;
+	IN3 : BOOL;
+	IN4 : BOOL;
+	IN5 : BOOL;
+	IN6	: BOOL;
+	IN7	: BOOL;
+	IN8 : BOOL;
+	IN9	: BOOL;
+	IN10 : BOOL;
+	
+	Initialize : BOOL := TRUE;
+END_VAR
+
+VAR_OUTPUT
+	Q : BOOL;
+END_VAR
+
+VAR
+	Input : ARRAY [1..10] OF eInput;
+	n : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF Initialize THEN
+	IN1 := Input[1].cActiveState;
+	IN2 := Input[2].cActiveState;
+	IN3 := Input[3].cActiveState;
+	IN4 := Input[4].cActiveState;
+	IN5 := Input[5].cActiveState;
+	IN6 := Input[6].cActiveState;
+	IN7 := Input[7].cActiveState;
+	IN8 := Input[8].cActiveState;
+	IN9 := Input[9].cActiveState;
+	IN10 := Input[10].cActiveState;	
+END_IF
+
+Input[1].iState := IN1;
+Input[2].iState := IN2;
+Input[3].iState := IN3;
+Input[4].iState := IN4;
+Input[5].iState := IN5;
+Input[6].iState := IN6;
+Input[7].iState := IN7;
+Input[8].iState := IN8;
+Input[9].iState := IN9;
+Input[10].iState := IN10;
+
+
+FOR n := 1 TO 10 BY 1 DO
+
+		IF Input[n].iForceActive AND NOT Input[n].iForceInactive THEN
+			Input[n].oActive := TRUE;
+		ELSIF Input[n].iForceInactive AND NOT Input[n].iForceActive THEN
+			Input[n].oActive := FALSE;
+		ELSIF Input[n].cActiveState = Input[n].iState THEN
+			Input[n].oActive := TRUE;
+		ELSIF Input[n].cActiveState <> Input[n].iState THEN
+			Input[n].oActive := FALSE;
+		END_IF
+
+END_FOR	
+
+IF NOT Initialize THEN
+Q := 	Input[1].oActive AND 
+		Input[2].oActive AND 
+		Input[3].oActive AND 
+		Input[4].oActive AND 
+		Input[5].oActive AND 
+		Input[6].oActive AND 
+		Input[7].oActive AND 
+		Input[8].oActive AND 
+		Input[9].oActive AND 
+		Input[10].oActive;
+END_IF
+
+Initialize := FALSE;]]></ST>
+    </Implementation>
+    <LineIds Name="eAND">
+      <LineId Id="3" Count="51" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

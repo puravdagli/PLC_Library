@@ -1,0 +1,179 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="Device_Motor_OnOff" Id="{0f248f33-090a-4920-b7d6-7c81d4739f1c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Device_Motor_OnOff
+VAR_INPUT
+	iPowerOn 		: BOOL;
+	iSafetyOK 		: BOOL;
+	iCmd 			: CmdMotorOnOff;
+	iCmdRetry		: BOOL;
+	iCmdAbort		: BOOL;
+	iOkToRunFwd		: eAND;
+	iOkToRunRev		: eAND;
+
+	iFwdOn AT %I* 	: BOOL;
+	iRevOn AT %I* 	: BOOL;
+END_VAR
+
+VAR_OUTPUT
+	oState			: StateMotorOnOff;
+	oCmdFailed		: BOOL;
+	oErrorCode		: INT;
+	
+	oRunFwd AT %Q* 	: BOOL;
+	oRunRev AT %Q* 	: BOOL;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	Name			: STRING;
+	
+	cReversible 	: BOOL;
+	cStartTimeout 	: TIME := T#5S;
+	cStopTimeout 	: TIME := T#5S;
+END_VAR
+
+VAR
+	StartTimer		: TON;
+	StopTimer		: TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[StartTimer.PT 	:= cStartTimeout;
+StopTimer.PT 	:= cStopTimeout;
+
+CASE oState OF
+//0=============================================================================================================//
+	StateMotorOnOff.None:
+								oState 				:= StateMotorOnOff.Stopping;
+//1=============================================================================================================//									
+	StateMotorOnOff.Error:
+								IF iCmd = CmdMotorOnOff.Reset THEN
+									oState 			:= StateMotorOnOff.Stopping;
+									iCmd			:= CmdMotorOnOff.None;	
+								END_IF
+//2=============================================================================================================//	
+	StateMotorOnOff.Stopping:
+								oRunFwd 			:= FALSE;
+								oRunRev 			:= FALSE;
+								IF NOT iFwdOn AND NOT iRevOn THEN
+									oState 			:= StateMotorOnOff.Stopped;
+								ELSE
+									StopTimer(IN 	:= TRUE);
+									IF StopTimer.Q THEN
+										oState 		:= StateMotorOnOff.Error;
+										oErrorCode 	:= 5;														//	Failed to Stop
+									END_IF
+								END_IF
+								
+								IF oState <> StateMotorOnOff.Stopping THEN
+									StopTimer(IN 	:= FALSE);
+								END_IF
+//3=============================================================================================================//								
+	StateMotorOnOff.Stopped:
+								CASE iCmd OF
+									CmdMotorOnOff.StartFwd:
+										IF iOkToRunFwd AND NOT oCmdFailed THEN
+											oState		:= StateMotorOnOff.StartingFwd;
+											iCmd 		:= CmdMotorOnOff.None;
+										ELSE
+											oCmdFailed 	:= TRUE;
+											IF iCmdRetry THEN
+												oCmdFailed	:= FALSE;
+												iCmdRetry	:= FALSE;
+											ELSIF iCmdAbort THEN
+												oCmdFailed	:= FALSE;
+												iCmdAbort	:= FALSE;
+												iCmd		:= CmdMotorOnOff.None;
+											END_IF
+										END_IF
+										
+									CmdMotorOnOff.StartRev:
+										IF iOkToRunRev AND cReversible AND NOT oCmdFailed THEN
+											oState		:= StateMotorOnOff.StartingFwd;
+											iCmd 		:= CmdMotorOnOff.None;
+										ELSE
+											oCmdFailed 	:= TRUE;
+											IF iCmdRetry THEN
+												oCmdFailed	:= FALSE;
+												iCmdRetry	:= FALSE;
+											ELSIF iCmdAbort THEN
+												oCmdFailed	:= FALSE;
+												iCmdAbort	:= FALSE;
+												iCmd		:= CmdMotorOnOff.None;
+											END_IF
+										END_IF
+								END_CASE
+//4=============================================================================================================//								
+	StateMotorOnOff.StartingFwd:
+								oRunFwd 			:= TRUE;
+								oRunRev 			:= FALSE;
+								IF iFwdOn AND NOT iRevOn THEN
+									oState := StateMotorOnOff.RunningFwd;
+								ELSE
+									StartTimer(IN 	:= TRUE);
+									IF StartTimer.Q THEN
+										oState 		:= StateMotorOnOff.Error;	
+										oErrorCode 	:= 1;														//	Failed to Start Fwd
+									END_IF	
+								END_IF
+								
+								CASE iCmd OF
+									CmdMotorOnOff.Stop:
+										oState		:= StateMotorOnOff.Stopping;
+										iCmd		:= CmdMotorOnOff.None;
+								END_CASE
+								
+								IF oState <> StateMotorOnOff.StartingFwd THEN
+									StartTimer(IN 	:= FALSE);
+								END_IF
+								
+//5=============================================================================================================//								
+	StateMotorOnOff.RunningFwd:
+								IF NOT iFwdOn OR iRevOn THEN
+									oState			:= StateMotorOnOff.Error;
+									oErrorCode		:= 2;														//	Failed to Remain Running Fwd
+								END_IF
+								
+								CASE iCmd OF
+									CmdMotorOnOff.Stop:
+										oState		:= StateMotorOnOff.Stopping;
+										iCmd		:= CmdMotorOnOff.None;
+								END_CASE
+//6=============================================================================================================//	
+	StateMotorOnOff.StartingRev:
+								oRunFwd 			:= FALSE;
+								oRunRev 			:= TRUE;
+								
+								IF iFwdOn AND NOT iRevOn THEN
+									oState 			:= StateMotorOnOff.RunningFwd;
+								ELSE
+									StartTimer(IN 	:= TRUE);
+									IF StartTimer.Q THEN
+										oState 		:= StateMotorOnOff.Error;
+										oErrorCode 	:= 3;														//	Failed to Start Rev
+									END_IF
+								END_IF
+								
+								IF oState <> StateMotorOnOff.StartingFwd THEN
+									StartTimer(IN 	:= FALSE);
+								END_IF
+//7=============================================================================================================//								
+	StateMotorOnOff.RunningRev:
+								IF NOT iRevOn OR iFwdOn THEN
+									oState			:= StateMotorOnOff.Error;
+									oErrorCode		:= 4;														//	Failed to Remain Running Rev
+								END_IF
+								
+								CASE iCmd OF
+									CmdMotorOnOff.Stop:
+										oState		:= StateMotorOnOff.Stopping;
+										iCmd		:= CmdMotorOnOff.None;
+								END_CASE
+	
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="Device_Motor_OnOff">
+      <LineId Id="3" Count="131" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

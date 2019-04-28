@@ -1,0 +1,201 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="Device_Actuator" Id="{8e45e43c-93cb-4f3b-887e-274eeb3146e2}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Device_Actuator
+
+VAR_INPUT
+	iPowerOn 			: BOOL;
+	iSafetyOK 			: BOOL;
+	iMode				: Mode;
+	iCmd 				: CmdActuator;
+	iCmdRetry			: BOOL;
+	iCmdAbort			: BOOL;
+	iOkToExtend			: eAND;
+	iOkToRetract		: eAND;
+
+	iExtended AT %I* 	: BOOL;
+	iRetracted AT %I* 	: BOOL;
+END_VAR
+
+VAR_OUTPUT
+	oState				: StateActuator;
+	oErrorCode			: INT;
+	oCmdFailed			: BOOL;	
+	
+	oExtend AT %Q* 		: BOOL;
+	oRetract AT %Q* 	: BOOL;
+END_VAR
+
+VAR
+	ExtendedDebounce	: TON;
+	ExtendingTimer		: TON;
+	RetractedDebounce	: TON;
+	RetractingTimer		: TON;
+END_VAR
+
+VAR_INPUT PERSISTENT	
+	Name				: STRING;
+	ExtendAlias			: STRING;
+	RetractAlias		: STRING;
+
+	cHold 				: BOOL 	:= 1;
+	cDebounceTime		: TIME	:= T#0.5S;
+	cExtendTimeout 		: TIME	:= T#5S;
+	cRetractTimeout 	: TIME	:= T#5S;	
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ExtendedDebounce.PT := cDebounceTime;
+RetractedDebounce.PT := cDebounceTime;
+ExtendingTimer.PT := cExtendTimeout;
+RetractingTimer.PT := cRetractTimeout;
+
+ExtendedDebounce (IN :=iExtended);
+RetractedDebounce (IN := iRetracted);
+
+
+CASE oState OF
+//0=============================================================================================================//
+	StateActuator.None:
+								IF iCmd = CmdActuator.Retract THEN
+									IF iOkToRetract.Q AND NOT oCmdFailed THEN
+										oState 			:= StateActuator.Retracting;
+										iCmd			:= CmdActuator.None;
+									ELSE
+										oCmdFailed 		:= TRUE;
+										IF iCmdRetry THEN
+											oCmdFailed	:= FALSE;
+											iCmdRetry	:= FALSE;
+										ELSIF iCmdAbort THEN
+											oCmdFailed	:= FALSE;
+											iCmdAbort	:= FALSE;
+											iCmd		:= CmdActuator.None;
+										END_IF
+									END_IF
+								ELSIF iCmd = CmdActuator.Extend THEN
+									IF iOkToExtend.Q AND NOT oCmdFailed THEN
+									oState 				:= StateActuator.Extending;
+									iCmd				:= CmdActuator.None;
+									ELSE
+										oCmdFailed 		:= TRUE;
+										IF iCmdRetry THEN
+											oCmdFailed	:= FALSE;
+											iCmdRetry	:= FALSE;
+										ELSIF iCmdAbort THEN
+											oCmdFailed	:= FALSE;
+											iCmdAbort	:= FALSE;
+											iCmd		:= CmdActuator.None;
+										END_IF
+									END_IF
+								END_IF
+//1=============================================================================================================//	
+	StateActuator.Error:
+								IF iCmd = CmdActuator.Reset THEN
+									IF ExtendedDebounce.Q THEN
+										oState 		:= StateActuator.Extended;
+										oExtend 	:= cHold;
+										oRetract 	:= FALSE;
+									ELSIF RetractedDebounce.Q THEN
+										oState 		:= StateActuator.Retracted;
+										oExtend		:= FALSE;
+										oRetract 	:= cHold;
+									ELSE
+										oState 		:= StateActuator.None;
+										oExtend 	:= FALSE;
+										oRetract 	:= FALSE;
+									END_IF
+								END_IF
+								IF oState <> StateActuator.Error THEN
+									oErrorCode 		:= 0;
+								END_IF
+//2=============================================================================================================//	
+	StateActuator.Extending:
+								oExtend 		:= TRUE;
+								oRetract		:= FALSE;
+								
+								IF ExtendedDebounce.Q THEN
+									oState := StateActuator.Extended;
+									oExtend := cHold;
+								ELSE
+									ExtendingTimer (IN := TRUE);
+									IF ExtendingTimer.Q THEN
+										oState := StateActuator.Error;
+										oErrorCode := 1;														//	Failed to Extend
+									END_IF
+								END_IF
+														
+								IF oState <> StateActuator.Extending THEN
+									ExtendingTimer (IN := FALSE);
+								END_IF
+//3=============================================================================================================//
+	StateActuator.Extended:
+								IF cHold AND NOT iExtended THEN
+									oState:= StateActuator.Error;
+									oErrorcode := 2;															//	Failed to remain Extended
+								END_IF
+								
+								IF iCmd = CmdActuator.Retract THEN
+									IF iOkToRetract.Q AND NOT oCmdFailed THEN
+										oState 			:= StateActuator.Retracting;
+										iCmd			:= CmdActuator.None;
+									ELSE
+										oCmdFailed 		:= TRUE;
+										IF iCmdRetry THEN
+											oCmdFailed	:= FALSE;
+											iCmdRetry	:= FALSE;
+										ELSIF iCmdAbort THEN
+											oCmdFailed	:= FALSE;
+											iCmdAbort	:= FALSE;
+											iCmd		:= CmdActuator.None;
+										END_IF
+									END_IF
+								END_IF
+//4=============================================================================================================//	
+	StateActuator.Retracting:
+								oRetract 		:= TRUE;
+								oExtend			:= FALSE;
+								
+								IF RetractedDebounce.Q THEN
+									oState := StateActuator.Retracted;
+									oRetract := cHold;
+								ELSE
+									RetractingTimer (IN := TRUE);
+									IF RetractingTimer.Q THEN
+										oState := StateActuator.Error;
+										oErrorCode := 3;														//	Failed to Retract
+									END_IF
+								END_IF
+								
+								IF oState <> StateActuator.Retracting THEN
+									RetractingTimer (IN := FALSE);
+								END_IF
+//5=============================================================================================================//								
+	StateActuator.Retracted:
+								IF cHold AND NOT iRetracted THEN
+									oState:= StateActuator.Error;
+									oErrorcode := 4;															//	Failed to remain Retracted
+								END_IF
+								
+								IF iCmd = CmdActuator.Extend THEN
+									IF iOkToExtend.Q AND NOT oCmdFailed THEN
+									oState 				:= StateActuator.Extending;
+									iCmd				:= CmdActuator.None;
+									ELSE
+										oCmdFailed 		:= TRUE;
+										IF iCmdRetry THEN
+											oCmdFailed	:= FALSE;
+											iCmdRetry	:= FALSE;
+										ELSIF iCmdAbort THEN
+											oCmdFailed	:= FALSE;
+											iCmdAbort	:= FALSE;
+											iCmd		:= CmdActuator.None;
+										END_IF
+									END_IF
+								END_IF
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="Device_Actuator">
+      <LineId Id="3" Count="146" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

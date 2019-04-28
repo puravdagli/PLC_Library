@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <POU Name="Assembly_LAT" Id="{a0545ff5-c5d0-4f16-8eeb-954c14055efb}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Assembly_LAT
+
+VAR_INPUT
+	iSafetyOK			: BOOL := TRUE;
+	iPowerOn			: BOOL;
+	cmdDivertRight 		: BOOL;
+	cmdDivertLeft 		: BOOL;
+	cmdPassThru 		: BOOL;
+	cmdReceiveRight 	: BOOL;
+	cmdReceiveLeft 		: BOOL;
+END_VAR
+
+VAR_OUTPUT
+	stsIdle				: BOOL;
+	stsDivertingRight 	: BOOL;
+	stsDivertingLeft 	: BOOL;
+	stsPassingThru 		: BOOL;
+	stsReceivingRight	: BOOL;
+	stsRecevingLeft 	: BOOL;
+	stsFaulted 			: BOOL;
+	stsFaultCode 		: INT;
+END_VAR
+
+VAR_IN_OUT
+	PartSensor 			: Device_PartSensor;
+	Lift 				: Device_Actuator;
+	Transfer			: Device_Motor_OnOff;
+END_VAR
+
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//Map SafetyOK input to Lift and Conv
+
+Lift.iSafetyOK 	:= inpSafetyOK;
+Conv.inpSafetyOK 	:= inpSafetyOK;
+
+//Map PowerOn input to Lift and Conv
+
+Lift.iPowerOn 	:= inpPowerOn;
+Conv.inpPowerOn 	:= inpPowerOn;
+
+IF PartSensor.oPartPresent THEN
+	//Lift.cmdExtend 	:= 1;
+	//Conv.cmdRunFwd 	:= 1;
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="Assembly_LAT">
+      <LineId Id="3" Count="13" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

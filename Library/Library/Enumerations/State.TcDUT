@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4022.11">
+  <DUT Name="State" Id="{711acabc-880c-4edb-97f9-25be82c11d70}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE State :
+(
+	None,
+	Stopped,
+	Starting,
+	Running,
+	Pausing,
+	Paused,
+	Resuming,
+	Stopping,
+	Aborting,
+	Aborted,
+	Resetting	
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
