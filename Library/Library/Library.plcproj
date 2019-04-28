@@ -71,6 +71,9 @@
     <Compile Include="DUTs\ServoMove.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="DUTs\test.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Enumerations\Cmd.TcDUT">
       <SubType>Code</SubType>
     </Compile>
